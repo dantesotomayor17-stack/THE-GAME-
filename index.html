@@ -18,14 +18,25 @@
         .mine-glow { box-shadow: 0 0 15px rgba(239, 68, 68, 0.6); border-color: rgba(239, 68, 68, 0.8); }
         .grid-container { perspective: 1000px; }
         .sync-indicator { transition: all 0.3s; }
-        .syncing { animation: pulse 1.5s infinite; }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
+        #debugInfo { 
+            position: fixed; 
+            bottom: 10px; 
+            left: 10px; 
+            background: rgba(0,0,0,0.8); 
+            color: #0f0; 
+            padding: 10px; 
+            font-family: monospace; 
+            font-size: 12px; 
+            border-radius: 5px;
+            max-width: 300px;
+            z-index: 9999;
         }
     </style>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen flex items-center justify-center p-4">
+
+    <!-- Debug Info -->
+    <div id="debugInfo">Iniciando...</div>
 
     <div class="max-w-md w-full bg-slate-800 rounded-2xl shadow-2xl shadow-slate-950/50 p-6 border border-slate-700">
         
@@ -49,9 +60,6 @@
                   <span class="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
                 </span>
                 Rondas: 0
-            </div>
-            <div id="accuracyBadge" class="hidden bg-emerald-900/50 text-emerald-300 text-xs font-semibold px-4 py-1.5 rounded-full border border-emerald-800/50">
-                Precisión: --%
             </div>
         </div>
 
@@ -79,15 +87,6 @@
                     Borrar Todo
                 </button>
             </div>
-            
-            <div class="flex gap-3 pt-2 border-t border-slate-700">
-                <button id="btnExport" class="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium py-2.5 px-4 rounded-xl transition-colors text-xs">
-                    📥 Exportar Datos
-                </button>
-                <button id="btnImport" class="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium py-2.5 px-4 rounded-xl transition-colors text-xs">
-                     Importar Datos
-                </button>
-            </div>
         </div>
 
         <!-- User Info -->
@@ -108,8 +107,18 @@
     </div>
 
     <script>
+        // Debug function
+        function debug(msg) {
+            const debugEl = document.getElementById('debugInfo');
+            if (debugEl) {
+                debugEl.innerHTML += '<br/>➜ ' + msg;
+                debugEl.scrollTop = debugEl.scrollHeight;
+            }
+            console.log(msg);
+        }
+
         // ==========================================
-        // 🔥 CONFIGURACIÓN DE FIREBASE - TU PROYECTO
+        // 🔥 CONFIGURACIÓN DE FIREBASE
         // ==========================================
         const firebaseConfig = {
             apiKey: "AIzaSyDnBl_DxrG9A3Hggvgrc60080okVo9E3E",
@@ -120,159 +129,12 @@
             appId: "1:574046109385:web:b85de400b9c6309c11d718"
         };
 
-        // Inicializar Firebase
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.firestore();
-        const auth = firebase.auth();
-        
-        let currentUserId = null;
-        let gameHistory = [];
-        let userStats = {
-            totalRounds: 0,
-            correctPredictions: 0,
-            lastSync: null
-        };
+        debug("📦 Firebase config cargado");
 
-        // ==========================================
-        // 🔐 AUTENTICACIÓN ANÓNIMA
-        // ==========================================
-        async function initializeAuth() {
-            try {
-                auth.signInAnonymously().then((userCredential) => {
-                    currentUserId = userCredential.user.uid;
-                    document.getElementById('userId').textContent = currentUserId.substring(0, 8) + '...';
-                    updateConnectionStatus(true);
-                    loadHistoryFromFirebase();
-                }).catch((error) => {
-                    console.error("Error en autenticación:", error);
-                    updateConnectionStatus(false);
-                    showMessage("Error de Conexión", "No se pudo conectar con Firebase. Verifica las reglas de seguridad.");
-                });
-            } catch (error) {
-                console.error("Error:", error);
-                updateConnectionStatus(false);
-            }
-        }
-
-        function updateConnectionStatus(connected) {
-            const statusEl = document.getElementById('firebaseStatus');
-            const textEl = document.getElementById('connectionText');
-            const btn = document.getElementById('btnRegister');
-            
-            if (connected) {
-                statusEl.className = 'sync-indicator w-3 h-3 rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/50';
-                textEl.textContent = 'Sincronizado en la nube ✓';
-                textEl.className = 'text-emerald-400 text-xs mb-2';
-                btn.disabled = false;
-            } else {
-                statusEl.className = 'sync-indicator w-3 h-3 rounded-full bg-red-500';
-                textEl.textContent = 'Sin conexión - Verifica configuración';
-                textEl.className = 'text-red-400 text-xs mb-2';
-                btn.disabled = true;
-            }
-        }
-
-        // ==========================================
-        //  FIRESTORE - GUARDAR/CARGAR DATOS
-        // ==========================================
-        async function saveToFirebase(roundData) {
-            if (!currentUserId) return;
-            
-            try {
-                const docRef = db.collection('users').doc(currentUserId)
-                    .collection('gameHistory').doc();
-                
-                await docRef.set({
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-                    roundNumber: gameHistory.length,
-                    mines: roundData.mines,
-                    prediction: roundData.prediction,
-                    createdAt: new Date().toISOString()
-                });
-                
-                // Actualizar estadísticas
-                await updateStatsInFirebase();
-                
-            } catch (error) {
-                console.error("Error guardando en Firebase:", error);
-                showMessage("Error de Sync", "No se pudo guardar en la nube. Verifica las reglas de Firestore.");
-            }
-        }
-
-        async function loadHistoryFromFirebase() {
-            if (!currentUserId) return;
-            
-            try {
-                const snapshot = await db.collection('users').doc(currentUserId)
-                    .collection('gameHistory')
-                    .orderBy('createdAt', 'asc')
-                    .limit(100)
-                    .get();
-                
-                gameHistory = [];
-                snapshot.forEach((doc) => {
-                    const data = doc.data();
-                    if (data.mines) {
-                        gameHistory.push(data.mines);
-                    }
-                });
-                
-                updateStatusUI();
-                if (gameHistory.length > 0) {
-                    showMessage("Datos Cargados", `Se cargaron ${gameHistory.length} rondas desde la nube`);
-                }
-                
-            } catch (error) {
-                console.error("Error cargando de Firebase:", error);
-                showMessage("Error", "No se pudieron cargar los datos. Revisa las reglas de seguridad.");
-            }
-        }
-
-        async function updateStatsInFirebase() {
-            if (!currentUserId) return;
-            
-            try {
-                await db.collection('users').doc(currentUserId).set({
-                    totalRounds: userStats.totalRounds,
-                    correctPredictions: userStats.correctPredictions,
-                    lastSync: firebase.firestore.FieldValue.serverTimestamp(),
-                    updatedAt: new Date().toISOString()
-                }, { merge: true });
-            } catch (error) {
-                console.error("Error actualizando stats:", error);
-            }
-        }
-
-        async function clearHistoryInFirebase() {
-            if (!currentUserId) return;
-            
-            try {
-                const snapshot = await db.collection('users').doc(currentUserId)
-                    .collection('gameHistory').get();
-                
-                const batch = db.batch();
-                snapshot.forEach((doc) => {
-                    batch.delete(doc.ref);
-                });
-                
-                await batch.commit();
-                
-                // Resetear stats
-                userStats = { totalRounds: 0, correctPredictions: 0, lastSync: null };
-                await updateStatsInFirebase();
-                
-            } catch (error) {
-                console.error("Error borrando en Firebase:", error);
-            }
-        }
-
-        // ==========================================
-        // 🎮 LÓGICA DEL JUEGO
-        // ==========================================
+        let db, auth, currentUserId = null, gameHistory = [], userStats = { totalRounds: 0, correctPredictions: 0 };
         const gridSize = 5;
         const gridElement = document.getElementById('mineGrid');
         const statusElement = document.getElementById('historyStatus');
-        
         let cells = [];
         let stateMode = 'input';
 
@@ -297,6 +159,7 @@
         }
 
         function initGrid() {
+            debug("🎮 Inicializando grid...");
             gridElement.innerHTML = '';
             cells = [];
             for (let i = 0; i < gridSize * gridSize; i++) {
@@ -317,6 +180,7 @@
                 gridElement.appendChild(cell);
                 cells.push(cell);
             }
+            debug("✅ Grid listo: " + cells.length + " celdas");
         }
 
         function toggleMine(cell) {
@@ -326,7 +190,7 @@
             if (!isMine) {
                 cell.classList.remove('bg-slate-700', 'border-slate-600', 'hover:bg-slate-600');
                 cell.classList.add('bg-red-500/20', 'border-red-500', 'mine-glow', 'text-2xl');
-                cell.textContent = '';
+                cell.textContent = '💣';
             } else {
                 cell.classList.add('bg-slate-700', 'border-slate-600', 'hover:bg-slate-600');
                 cell.classList.remove('bg-red-500/20', 'border-red-500', 'mine-glow', 'text-2xl');
@@ -344,6 +208,137 @@
             document.getElementById('btnText').textContent = 'Calcular Próxima Ronda';
         }
 
+        function updateConnectionStatus(connected) {
+            const statusEl = document.getElementById('firebaseStatus');
+            const textEl = document.getElementById('connectionText');
+            const btn = document.getElementById('btnRegister');
+            
+            if (connected) {
+                statusEl.className = 'sync-indicator w-3 h-3 rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/50';
+                textEl.textContent = 'Sincronizado en la nube ✓';
+                textEl.className = 'text-emerald-400 text-xs mb-2';
+                btn.disabled = false;
+                debug("✅ Conectado a Firebase");
+            } else {
+                statusEl.className = 'sync-indicator w-3 h-3 rounded-full bg-red-500';
+                textEl.textContent = 'Sin conexión';
+                textEl.className = 'text-red-400 text-xs mb-2';
+                btn.disabled = true;
+                debug("❌ Desconectado");
+            }
+        }
+
+        async function initializeFirebase() {
+            try {
+                debug("🔥 Inicializando Firebase...");
+                firebase.initializeApp(firebaseConfig);
+                db = firebase.firestore();
+                auth = firebase.auth();
+                debug("✅ Firebase inicializado");
+                
+                // Auth anónima
+                debug("🔐 Intentando autenticación anónima...");
+                const userCredential = await auth.signInAnonymously();
+                currentUserId = userCredential.user.uid;
+                debug("✅ Autenticado: " + currentUserId.substring(0, 8));
+                
+                document.getElementById('userId').textContent = currentUserId.substring(0, 8) + '...';
+                updateConnectionStatus(true);
+                
+                // Cargar historial
+                await loadHistoryFromFirebase();
+                
+            } catch (error) {
+                debug("❌ ERROR: " + error.message);
+                debug("Código: " + error.code);
+                console.error(error);
+                updateConnectionStatus(false);
+                
+                let errorMsg = error.message;
+                if (error.code === 'auth/unauthorized-domain') {
+                    errorMsg = "Dominio no autorizado. Agrega 'dantesotomayor17-stack.github.io' en Firebase Console → Authentication → Configuración → Dominios autorizados";
+                } else if (error.code === 'permission-denied') {
+                    errorMsg = "Permisos denegados en Firestore. Verifica las reglas.";
+                }
+                
+                setTimeout(() => showMessage("Error de Conexión", errorMsg), 1000);
+            }
+        }
+
+        async function loadHistoryFromFirebase() {
+            if (!currentUserId) return;
+            
+            try {
+                debug(" Cargando historial de Firebase...");
+                const snapshot = await db.collection('users').doc(currentUserId)
+                    .collection('gameHistory')
+                    .orderBy('createdAt', 'asc')
+                    .limit(100)
+                    .get();
+                
+                gameHistory = [];
+                snapshot.forEach((doc) => {
+                    const data = doc.data();
+                    if (data.mines) {
+                        gameHistory.push(data.mines);
+                    }
+                });
+                
+                debug("✅ Cargadas " + gameHistory.length + " rondas");
+                updateStatusUI();
+                
+                if (gameHistory.length > 0) {
+                    setTimeout(() => showMessage("Datos Cargados", `Se cargaron ${gameHistory.length} rondas desde la nube`), 1000);
+                }
+                
+            } catch (error) {
+                debug("❌ Error cargando: " + error.message);
+                console.error(error);
+            }
+        }
+
+        async function saveToFirebase(roundData) {
+            if (!currentUserId) return;
+            
+            try {
+                debug(" Guardando ronda " + gameHistory.length);
+                const docRef = db.collection('users').doc(currentUserId)
+                    .collection('gameHistory').doc();
+                
+                await docRef.set({
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                    roundNumber: gameHistory.length,
+                    mines: roundData.mines,
+                    prediction: roundData.prediction,
+                    createdAt: new Date().toISOString()
+                });
+                
+                debug("✅ Guardado en Firebase");
+            } catch (error) {
+                debug("❌ Error guardando: " + error.message);
+                console.error(error);
+            }
+        }
+
+        async function clearHistoryInFirebase() {
+            if (!currentUserId) return;
+            
+            try {
+                const snapshot = await db.collection('users').doc(currentUserId)
+                    .collection('gameHistory').get();
+                
+                const batch = db.batch();
+                snapshot.forEach((doc) => {
+                    batch.delete(doc.ref);
+                });
+                
+                await batch.commit();
+                debug("🗑️ Historial borrado de Firebase");
+            } catch (error) {
+                debug("❌ Error borrando: " + error.message);
+            }
+        }
+
         function calculateProbability() {
             if (stateMode === 'result') {
                 resetGridForNewInput();
@@ -358,22 +353,17 @@
                 return;
             }
 
-            // Guardar en historial local
             gameHistory.push(currentRoundMines);
-            if (gameHistory.length > 100) {
-                gameHistory.shift();
-            }
+            if (gameHistory.length > 100) gameHistory.shift();
             
             updateStatusUI();
             stateMode = 'result';
 
-            // Guardar en Firebase
             saveToFirebase({
                 mines: currentRoundMines,
                 prediction: 'calculated'
             });
 
-            // Calcular probabilidades
             cells.forEach((cell, index) => {
                 let mineFrequency = 0;
                 let roundsAgoLastMine = 99;
@@ -390,13 +380,8 @@
                 let safetyPercentage = 95;
                 safetyPercentage -= (mineFrequency * 12);
                 
-                if (roundsAgoLastMine === 0) {
-                    safetyPercentage -= 15;
-                }
-                
-                if (roundsAgoLastMine >= 4) {
-                    safetyPercentage += 10;
-                }
+                if (roundsAgoLastMine === 0) safetyPercentage -= 15;
+                if (roundsAgoLastMine >= 4) safetyPercentage += 10;
 
                 const row = Math.floor(index / gridSize);
                 const col = index % gridSize;
@@ -454,66 +439,25 @@
         }
 
         async function clearHistory() {
-            if (confirm('¿Borrar todo el historial? Esta acción no se puede deshacer.')) {
+            if (confirm('¿Borrar todo el historial?')) {
                 gameHistory = [];
                 updateStatusUI();
                 resetGridForNewInput();
                 await clearHistoryInFirebase();
-                showMessage("Memoria Borrada", "Historial eliminado de la nube y localmente");
+                showMessage("Memoria Borrada", "Historial eliminado");
             }
-        }
-
-        // Exportar/Importar datos (backup manual)
-        function exportData() {
-            const data = {
-                history: gameHistory,
-                stats: userStats,
-                exportedAt: new Date().toISOString()
-            };
-            const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `mines-backup-${new Date().toISOString().split('T')[0]}.json`;
-            a.click();
-            showMessage("Exportado", "Datos descargados correctamente");
-        }
-
-        function importData() {
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = '.json';
-            input.onchange = (e) => {
-                const file = e.target.files[0];
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    try {
-                        const data = JSON.parse(event.target.result);
-                        if (data.history && Array.isArray(data.history)) {
-                            gameHistory = data.history;
-                            updateStatusUI();
-                            showMessage("Importado", `${data.history.length} rondas cargadas`);
-                        }
-                    } catch (err) {
-                        showMessage("Error", "Archivo inválido");
-                    }
-                };
-                reader.readAsText(file);
-            };
-            input.click();
         }
 
         // Event Listeners
         document.getElementById('btnRegister').addEventListener('click', calculateProbability);
         document.getElementById('btnReset').addEventListener('click', resetGridForNewInput);
         document.getElementById('btnClearHistory').addEventListener('click', clearHistory);
-        document.getElementById('btnExport').addEventListener('click', exportData);
-        document.getElementById('btnImport').addEventListener('click', importData);
 
         // Inicializar
         window.onload = () => {
+            debug("🚀 App iniciando...");
             initGrid();
-            initializeAuth();
+            initializeFirebase();
         };
     </script>
 </body>
