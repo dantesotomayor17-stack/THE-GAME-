@@ -118,10 +118,10 @@
         }
 
         // ==========================================
-        // 🔥 CONFIGURACIÓN DE FIREBASE
+        // 🔥 CONFIGURACIÓN DE FIREBASE (API KEY CORREGIDA)
         // ==========================================
         const firebaseConfig = {
-            apiKey: "AIzaSyDnBl_DxrG9A3Hggvgrc60080okVo9E3E",
+            apiKey: "AIzaSyDnBL_DxrG9A3Hggvgrc60080okVo9E3E",
             authDomain: "the-game-2874f.firebaseapp.com",
             projectId: "the-game-2874f",
             storageBucket: "the-game-2874f.firebasestorage.app",
@@ -256,7 +256,7 @@
                 
                 let errorMsg = error.message;
                 if (error.code === 'auth/unauthorized-domain') {
-                    errorMsg = "Dominio no autorizado. Agrega 'dantesotomayor17-stack.github.io' en Firebase Console → Authentication → Configuración → Dominios autorizados";
+                    errorMsg = "Dominio no autorizado. Agrega tu dominio en Firebase Console → Authentication → Configuración → Dominios autorizados";
                 } else if (error.code === 'permission-denied') {
                     errorMsg = "Permisos denegados en Firestore. Verifica las reglas.";
                 }
@@ -269,7 +269,7 @@
             if (!currentUserId) return;
             
             try {
-                debug(" Cargando historial de Firebase...");
+                debug("📥 Cargando historial de Firebase...");
                 const snapshot = await db.collection('users').doc(currentUserId)
                     .collection('gameHistory')
                     .orderBy('createdAt', 'asc')
@@ -301,7 +301,7 @@
             if (!currentUserId) return;
             
             try {
-                debug(" Guardando ronda " + gameHistory.length);
+                debug("💾 Guardando ronda " + gameHistory.length);
                 const docRef = db.collection('users').doc(currentUserId)
                     .collection('gameHistory').doc();
                 
