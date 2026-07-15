@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Radar de Minas Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        
+        .cell-transition {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .mine-glow {
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.6);
+            border-color: rgba(239, 68, 68, 0.8);
+        }
+
+        .grid-container {
+            perspective: 1000px;
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex items-center justify-center p-4">
+
+    <div class="max-w-md w-full bg-slate-800 rounded-2xl shadow-2xl shadow-slate-950/50 p-6 border border-slate-700">
+        
+        <!-- Header -->
+        <div class="text-center mb-6">
+            <h1 class="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400 mb-2">
+                Radar de Minas
+            </h1>
+            <p class="text-slate-400 text-sm">Predicción basada en historial de posiciones</p>
+        </div>
+
+        <!-- Status Badge -->
+        <div class="flex justify-center mb-6">
+            <div id="historyStatus" class="bg-blue-900/50 text-blue-300 text-xs font-semibold px-4 py-1.5 rounded-full border border-blue-800/50 flex items-center gap-2">
+                <span class="relative flex h-2 w-2">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                </span>
+                Partidas en memoria: 0 / 5
+            </div>
+        </div>
+
+        <!-- Grid Container -->
+        <div class="grid-container mb-8">
+            <div id="mineGrid" class="grid grid-cols-5 gap-2 w-full max-w-[300px] mx-auto aspect-square">
+                <!-- Cells will be generated here -->
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="space-y-3">
+            <button id="btnRegister" class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold py-3 px-4 rounded-xl shadow-lg shadow-blue-900/20 transform active:scale-[0.98] transition-all flex justify-center items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                </svg>
+                Calcular Probabilidad
+            </button>
+            
+            <div class="flex gap-3">
+                <button id="btnReset" class="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium py-2.5 px-4 rounded-xl transition-colors text-sm">
+                    Limpiar Tablero
+                </button>
+                <button id="btnClearHistory" class="flex-1 bg-red-900/30 hover:bg-red-900/50 text-red-400 border border-red-900/50 font-medium py-2.5 px-4 rounded-xl transition-colors text-sm">
+                    Borrar Memoria
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Message Modal (replaces alert) -->
+    <div id="messageModal" class="fixed inset-0 bg-black/60 flex items-center justify-center opacity-0 pointer-events-none transition-opacity z-50">
+        <div class="bg-slate-800 border border-slate-700 p-6 rounded-2xl max-w-sm w-full mx-4 transform scale-95 transition-transform" id="modalContent">
+            <h3 class="text-lg font-bold text-white mb-2" id="modalTitle">Aviso</h3>
+            <p class="text-slate-300 text-sm mb-5" id="modalMessage">Mensaje aquí.</p>
+            <button onclick="closeModal()" class="w-full bg-slate-700 hover:bg-slate-600 text-white font-medium py-2 rounded-xl transition-colors">
+                Entendido
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const gridSize = 5;
+        const gridElement = document.getElementById('mineGrid');
+        const statusElement = document.getElementById('historyStatus');
+        
+        let cells = [];
+        let gameHistory = []; // Almacena hasta 5 configuraciones de tablero
+        let stateMode = 'input'; // 'input' (marcando minas) o 'result' (viendo % seguro)
+
+        // Modal Logic
+        const modal = document.getElementById('messageModal');
+        const modalContent = document.getElementById('modalContent');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalMessage = document.getElementById('modalMessage');
+
+        function showMessage(title, message) {
+            modalTitle.textContent = title;
+            modalMessage.textContent = message;
+            modal.classList.remove('opacity-0', 'pointer-events-none');
+            modalContent.classList.remove('scale-95');
+            modalContent.classList.add('scale-100');
+        }
+
+        function closeModal() {
+            modal.classList.add('opacity-0', 'pointer-events-none');
+            modalContent.classList.remove('scale-100');
+            modalContent.classList.add('scale-95');
+        }
+
+        // Initialize Grid
+        function initGrid() {
+            gridElement.innerHTML = '';
+            cells = [];
+            for (let i = 0; i < gridSize * gridSize; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'cell-transition cursor-pointer rounded-xl bg-slate-700 border-2 border-slate-600 flex items-center justify-center text-xl font-bold shadow-inner select-none hover:bg-slate-600 active:scale-95';
+                cell.dataset.index = i;
+                cell.dataset.isMine = 'false';
+                
+                cell.addEventListener('click', () => {
+                    if(stateMode === 'input') {
+                        toggleMine(cell);
+                    } else {
+                        // Si hace click mientras ve resultados, limpiamos para nueva entrada
+                        resetGridForNewInput();
+                        toggleMine(cell);
+                    }
+                });
+                
+                gridElement.appendChild(cell);
+                cells.push(cell);
+            }
+        }
+
+        // Toggle Mine State
+        function toggleMine(cell) {
+            const isMine = cell.dataset.isMine === 'true';
+            cell.dataset.isMine = !isMine;
+            
+            if (!isMine) {
+                cell.classList.remove('bg-slate-700', 'border-slate-600', 'hover:bg-slate-600');
+                cell.classList.add('bg-red-500/20', 'border-red-500', 'mine-glow', 'text-2xl');
+                cell.textContent = '💣';
+            } else {
+                cell.classList.add('bg-slate-700', 'border-slate-600', 'hover:bg-slate-600');
+                cell.classList.remove('bg-red-500/20', 'border-red-500', 'mine-glow', 'text-2xl');
+                cell.textContent = '';
+            }
+        }
+
+        // Reset grid for a new turn without losing history
+        function resetGridForNewInput() {
+            stateMode = 'input';
+            cells.forEach(cell => {
+                cell.dataset.isMine = 'false';
+                cell.className = 'cell-transition cursor-pointer rounded-xl bg-slate-700 border-2 border-slate-600 flex items-center justify-center text-xl font-bold shadow-inner select-none hover:bg-slate-600 active:scale-95 text-slate-100';
+                cell.textContent = '';
+            });
+            document.getElementById('btnRegister').innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                </svg>
+                Calcular Probabilidad
+            `;
+        }
+
+        // Calculate probability based on history
+        function calculateProbability() {
+            if (stateMode === 'result') {
+                resetGridForNewInput();
+                return;
+            }
+
+            const currentRoundMines = cells.map(c => c.dataset.isMine === 'true');
+            const totalMinesMarked = currentRoundMines.filter(m => m).length;
+
+            if (totalMinesMarked === 0) {
+                showMessage("Tablero Vacío", "Por favor, marca al menos una mina de la ronda anterior antes de calcular.");
+                return;
+            }
+
+            // Guardar en el historial (máximo 5)
+            gameHistory.push(currentRoundMines);
+            if (gameHistory.length > 5) {
+                gameHistory.shift();
+            }
+            
+            updateStatusUI();
+
+            stateMode = 'result';
+            
+            // Algoritmo de probabilidad
+            cells.forEach((cell, index) => {
+                let mineFrequency = 0;
+                let isMineInLastRound = currentRoundMines[index];
+
+                // Frecuencia histórica
+                gameHistory.forEach(pastGame => {
+                    if (pastGame[index]) mineFrequency++;
+                });
+
+                // Probabilidad base inicial ajustada a 3 minas en 25 casillas (88%)
+                let safetyPercentage = 88; 
+
+                // Penalizar si ha caído repetidamente en esa zona (evitar sobreexposición)
+                safetyPercentage -= (mineFrequency * 14);
+
+                // Si fue mina en la ronda INMEDIATAMENTE anterior, ajustamos.
+                // En teoría de probabilidad independiente no cambia nada, pero como heurística:
+                if (isMineInLastRound) {
+                    safetyPercentage += 8; 
+                }
+
+                // Evaluar vecinos (adyacencias) de la ronda anterior
+                const row = Math.floor(index / gridSize);
+                const col = index % gridSize;
+                
+                const neighbors = [
+                    index - gridSize, // Arriba
+                    index + gridSize, // Abajo
+                    index - 1,        // Izquierda
+                    index + 1         // Derecha
+                ];
+
+                let adjacentMines = 0;
+                neighbors.forEach(n => {
+                    if (n >= 0 && n < 25) {
+                        if ((col === 0 && n === index - 1) || (col === gridSize - 1 && n === index + 1)) return;
+                        if (currentRoundMines[n]) adjacentMines++;
+                    }
+                });
+
+                // Si hay minas adyacentes de la ronda anterior, disminuye la seguridad (patrones en racimo)
+                safetyPercentage -= (adjacentMines * 6);
+
+                // Limitar valores entre 15% y 94% (para reflejar incertidumbre real RNG)
+                safetyPercentage = Math.max(15, Math.min(94, safetyPercentage));
+
+                applyHeatmap(cell, safetyPercentage);
+            });
+
+            document.getElementById('btnRegister').innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                </svg>
+                Ingresar Nueva Jugada
+            `;
+        }
+
+        // Apply visual colors based on safety percentage
+        function applyHeatmap(cell, safeScore) {
+            cell.className = 'cell-transition flex items-center justify-center text-base sm:text-lg font-bold rounded-xl shadow-inner select-none transition-all duration-500';
+            
+            if (safeScore >= 80) {
+                // Muy Seguro (Verde)
+                cell.classList.add('bg-emerald-500/20', 'border-2', 'border-emerald-500/50', 'text-emerald-400');
+            } else if (safeScore >= 50) {
+                // Precaución (Amarillo/Naranja)
+                cell.classList.add('bg-amber-500/20', 'border-2', 'border-amber-500/50', 'text-amber-400');
+            } else {
+                // Peligro (Rojo)
+                cell.classList.add('bg-red-500/20', 'border-2', 'border-red-500/50', 'text-red-400');
+            }
+            
+            cell.textContent = `${Math.floor(safeScore)}%`;
+        }
+
+        // Update history badge
+        function updateStatusUI() {
+            const statusText = `Partidas en memoria: ${gameHistory.length} / 5`;
+            statusElement.innerHTML = `
+                <span class="relative flex h-2 w-2">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full ${gameHistory.length > 0 ? 'bg-emerald-400' : 'bg-blue-400'} opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-2 w-2 ${gameHistory.length > 0 ? 'bg-emerald-500' : 'bg-blue-500'}"></span>
+                </span>
+                ${statusText}
+            `;
+            if(gameHistory.length > 0) {
+                statusElement.classList.replace('bg-blue-900/50', 'bg-emerald-900/50');
+                statusElement.classList.replace('text-blue-300', 'text-emerald-300');
+                statusElement.classList.replace('border-blue-800/50', 'border-emerald-800/50');
+            } else {
+                statusElement.classList.replace('bg-emerald-900/50', 'bg-blue-900/50');
+                statusElement.classList.replace('text-emerald-300', 'text-blue-300');
+                statusElement.classList.replace('border-emerald-800/50', 'border-blue-800/50');
+            }
+        }
+
+        // Clear all history
+        function clearHistory() {
+            gameHistory = [];
+            updateStatusUI();
+            resetGridForNewInput();
+            showMessage("Memoria Borrada", "El historial estadístico ha sido reiniciado a cero.");
+        }
+
+        // Event Listeners
+        document.getElementById('btnRegister').addEventListener('click', calculateProbability);
+        document.getElementById('btnReset').addEventListener('click', resetGridForNewInput);
+        document.getElementById('btnClearHistory').addEventListener('click', clearHistory);
+
+        // Start
+        window.onload = initGrid;
+
+    </script>
+</body>
+</html>
