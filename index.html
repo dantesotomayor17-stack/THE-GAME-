@@ -87,6 +87,12 @@
                     Borrar Todo
                 </button>
             </div>
+
+            <!-- Botón Cazaminas (Oculto hasta calcular) -->
+            <button id="btnToggleMode" class="hidden w-full mt-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-600 font-medium py-2.5 px-4 rounded-xl transition-colors text-sm flex justify-center items-center gap-2">
+                <span id="toggleIcon">💀</span>
+                <span id="toggleText">Ver Zonas de Peligro (Cazaminas)</span>
+            </button>
         </div>
 
         <!-- User Info -->
@@ -118,7 +124,7 @@
         }
 
         // ==========================================
-        // 🔥 CONFIGURACIÓN DE FIREBASE (API KEY CORREGIDA)
+        // 🔥 CONFIGURACIÓN DE FIREBASE
         // ==========================================
         const firebaseConfig = {
             apiKey: "AIzaSyDnBl_DxrG9A3Hggvgrc6OO030okVo9E3E",
@@ -135,8 +141,13 @@
         const gridSize = 5;
         const gridElement = document.getElementById('mineGrid');
         const statusElement = document.getElementById('historyStatus');
+        
         let cells = [];
         let stateMode = 'input';
+        
+        // --- Variables de Estado para Vistas ---
+        let lastCalculatedScores = []; 
+        let viewMode = 'safe'; // 'safe' o 'danger'
 
         // Modal Logic
         const modal = document.getElementById('messageModal');
@@ -200,10 +211,16 @@
 
         function resetGridForNewInput() {
             stateMode = 'input';
+            viewMode = 'safe'; // Reseteamos la vista por defecto
+            
+            // Ocultar botón de cazaminas al limpiar
+            const toggleBtn = document.getElementById('btnToggleMode');
+            if(toggleBtn) toggleBtn.classList.add('hidden');
+
             cells.forEach(cell => {
                 cell.dataset.isMine = 'false';
                 cell.className = 'cell-transition cursor-pointer rounded-xl bg-slate-700 border-2 border-slate-600 flex items-center justify-center text-xl font-bold shadow-inner select-none hover:bg-slate-600 active:scale-95 text-slate-100';
-                cell.textContent = '';
+                cell.innerHTML = ''; // Limpiar HTML completo (estrellas y texto)
             });
             document.getElementById('btnText').textContent = 'Calcular Próxima Ronda';
         }
@@ -364,24 +381,31 @@
                 prediction: 'calculated'
             });
 
-            cells.forEach((cell, index) => {
-                let mineFrequency = 0;
-                let roundsAgoLastMine = 99;
+            lastCalculatedScores = []; // Limpiamos puntajes para nueva vista
 
-                for (let i = gameHistory.length - 1; i >= 0; i--) {
+            cells.forEach((cell, index) => {
+                let weightedMineCount = 0;
+                let roundsAgoLastMine = 99;
+                let totalWeight = 0;
+
+                // Algoritmo Ponderado: Las rondas recientes impactan más que las viejas
+                for (let i = 0; i < gameHistory.length; i++) {
+                    let weight = 1 + (i / gameHistory.length) * 1.5; // Peso de 1.0 a 2.5
+                    totalWeight += weight;
+
                     if (gameHistory[i][index]) {
-                        mineFrequency++;
-                        if (roundsAgoLastMine === 99) {
-                            roundsAgoLastMine = (gameHistory.length - 1) - i;
-                        }
+                        weightedMineCount += weight;
+                        roundsAgoLastMine = (gameHistory.length - 1) - i;
                     }
                 }
 
-                let safetyPercentage = 95;
-                safetyPercentage -= (mineFrequency * 12);
+                // Cálculo de Riesgo normalizado
+                let riskRatio = totalWeight > 0 ? (weightedMineCount / totalWeight) : 0;
+                let safetyPercentage = 95 - (riskRatio * 100); 
                 
-                if (roundsAgoLastMine === 0) safetyPercentage -= 15;
-                if (roundsAgoLastMine >= 4) safetyPercentage += 10;
+                // Ajustes situacionales
+                if (roundsAgoLastMine === 0) safetyPercentage -= 15; // Cayó justo antes
+                if (roundsAgoLastMine >= 4) safetyPercentage += 12; // Lleva rato sin caer
 
                 const row = Math.floor(index / gridSize);
                 const col = index % gridSize;
@@ -398,27 +422,93 @@
                     });
                 }
 
-                safetyPercentage -= (adjacentMinesInLastRound * 5);
-                safetyPercentage = Math.max(10, Math.min(98, safetyPercentage));
-
-                applyHeatmap(cell, safetyPercentage);
+                safetyPercentage -= (adjacentMinesInLastRound * 6);
+                
+                // Límites realistas (Ninguna es 100% segura, limitamos a 94 máximo)
+                safetyPercentage = Math.max(5, Math.min(94, safetyPercentage));
+                
+                lastCalculatedScores.push(Math.floor(safetyPercentage));
             });
 
             document.getElementById('btnText').textContent = 'Ingresar Nueva Ronda';
+            
+            // Mostrar botón Cazaminas
+            const toggleBtn = document.getElementById('btnToggleMode');
+            if(toggleBtn) toggleBtn.classList.remove('hidden');
+
+            renderGridScores();
         }
 
-        function applyHeatmap(cell, safeScore) {
-            cell.className = 'cell-transition flex items-center justify-center text-base sm:text-lg font-bold rounded-xl shadow-inner select-none transition-all duration-500';
+        function renderGridScores() {
+            // Buscamos el top 3 de seguras y peligrosas para destacarlas
+            let sortedScores = [...lastCalculatedScores].sort((a, b) => b - a);
+            let topSafest = sortedScores.slice(0, 3);
+            let topDanger = sortedScores.slice(-3);
+
+            cells.forEach((cell, index) => {
+                let safeScore = lastCalculatedScores[index];
+                
+                let isTopSafe = topSafest.includes(safeScore) && topSafest.length > 0;
+                let isTopDanger = topDanger.includes(safeScore) && topDanger.length > 0;
+
+                // Reiniciamos clases
+                cell.className = 'cell-transition flex flex-col items-center justify-center text-sm sm:text-base font-bold rounded-xl shadow-inner select-none transition-all duration-500 relative overflow-hidden';
+                
+                if (viewMode === 'safe') {
+                    // --- VISTA: SEGURO (Predeterminado) ---
+                    if (safeScore >= 75) {
+                        cell.classList.add('bg-emerald-500/20', 'border-2', 'border-emerald-500/50', 'text-emerald-400');
+                    } else if (safeScore >= 45) {
+                        cell.classList.add('bg-amber-500/20', 'border-2', 'border-amber-500/50', 'text-amber-400');
+                    } else {
+                        cell.classList.add('bg-red-500/20', 'border-2', 'border-red-500/50', 'text-red-400', 'opacity-50');
+                    }
+                    
+                    let innerHTML = `<span>${safeScore}%</span>`;
+                    
+                    // Hit & Run (Estrellas)
+                    if (isTopSafe) {
+                        cell.classList.add('ring-2', 'ring-emerald-400', 'ring-offset-2', 'ring-offset-slate-800', 'shadow-[0_0_15px_rgba(52,211,153,0.5)]');
+                        innerHTML += `<span class="absolute top-0 right-1 text-[10px] sm:text-xs animate-pulse">⭐</span>`;
+                    }
+                    cell.innerHTML = innerHTML;
+
+                } else {
+                    // --- VISTA: CAZAMINAS 💀 ---
+                    let dangerScore = 100 - safeScore; // Invertimos
+                    
+                    if (dangerScore >= 75) {
+                        cell.classList.add('bg-purple-900/40', 'border-2', 'border-purple-500', 'text-purple-400', 'shadow-[0_0_15px_rgba(168,85,247,0.4)]');
+                    } else if (dangerScore >= 45) {
+                        cell.classList.add('bg-orange-900/40', 'border-2', 'border-orange-500/50', 'text-orange-400');
+                    } else {
+                        cell.classList.add('bg-slate-800', 'border-2', 'border-slate-700', 'text-slate-500', 'opacity-30');
+                    }
+                    
+                    let innerHTML = `<span>${dangerScore}%</span>`;
+                    
+                    if (isTopDanger) {
+                        cell.classList.add('ring-2', 'ring-purple-500', 'ring-offset-2', 'ring-offset-slate-800', 'bg-purple-900/60');
+                        innerHTML += `<span class="absolute top-0 right-1 text-[10px] sm:text-xs animate-bounce">💀</span>`;
+                    }
+                    cell.innerHTML = innerHTML;
+                }
+            });
+        }
+
+        function toggleViewMode() {
+            viewMode = viewMode === 'safe' ? 'danger' : 'safe';
+            const btnText = document.getElementById('toggleText');
+            const btnIcon = document.getElementById('toggleIcon');
             
-            if (safeScore >= 80) {
-                cell.classList.add('bg-emerald-500/20', 'border-2', 'border-emerald-500/50', 'text-emerald-400');
-            } else if (safeScore >= 50) {
-                cell.classList.add('bg-amber-500/20', 'border-2', 'border-amber-500/50', 'text-amber-400');
+            if (viewMode === 'safe') {
+                btnIcon.textContent = '💀';
+                btnText.textContent = 'Ver Zonas de Peligro (Cazaminas)';
             } else {
-                cell.classList.add('bg-red-500/20', 'border-2', 'border-red-500/50', 'text-red-400');
+                btnIcon.textContent = '⭐';
+                btnText.textContent = 'Ver Zonas Seguras';
             }
-            
-            cell.textContent = `${Math.floor(safeScore)}%`;
+            renderGridScores();
         }
 
         function updateStatusUI() {
@@ -444,7 +534,7 @@
                 updateStatusUI();
                 resetGridForNewInput();
                 await clearHistoryInFirebase();
-                showMessage("Memoria Borrada", "Historial eliminado");
+                showMessage("Memoria Borrada", "Historial eliminado de la nube");
             }
         }
 
@@ -452,6 +542,7 @@
         document.getElementById('btnRegister').addEventListener('click', calculateProbability);
         document.getElementById('btnReset').addEventListener('click', resetGridForNewInput);
         document.getElementById('btnClearHistory').addEventListener('click', clearHistory);
+        document.getElementById('btnToggleMode').addEventListener('click', toggleViewMode);
 
         // Inicializar
         window.onload = () => {
