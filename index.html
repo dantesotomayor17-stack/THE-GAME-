@@ -16,87 +16,122 @@
         body { font-family: 'Inter', sans-serif; }
         .cell-transition { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
         .mine-glow { box-shadow: 0 0 15px rgba(239, 68, 68, 0.6); border-color: rgba(239, 68, 68, 0.8); }
+        .acierto-glow { box-shadow: 0 0 15px rgba(59, 130, 246, 0.6); border-color: rgba(59, 130, 246, 0.8); }
         .grid-container { perspective: 1000px; }
         .sync-indicator { transition: all 0.3s; }
+        
+        /* Animación para las estrellas recomendadas */
+        @keyframes pulse-star {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+        }
+        .star-target { animation: pulse-star 1.5s infinite ease-in-out; }
+
         #debugInfo { 
-            position: fixed; 
-            bottom: 10px; 
-            left: 10px; 
-            background: rgba(0,0,0,0.8); 
-            color: #0f0; 
-            padding: 10px; 
-            font-family: monospace; 
-            font-size: 12px; 
-            border-radius: 5px;
-            max-width: 300px;
-            z-index: 9999;
+            position: fixed; bottom: 10px; left: 10px; 
+            background: rgba(0,0,0,0.8); color: #0f0; 
+            padding: 10px; font-family: monospace; font-size: 12px; 
+            border-radius: 5px; max-width: 300px; max-height: 150px; overflow-y: auto; z-index: 9999;
         }
     </style>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen flex items-center justify-center p-4">
 
     <!-- Debug Info -->
-    <div id="debugInfo">Iniciando...</div>
+    <div id="debugInfo">Iniciando sistema...</div>
 
     <div class="max-w-md w-full bg-slate-800 rounded-2xl shadow-2xl shadow-slate-950/50 p-6 border border-slate-700">
         
         <!-- Header con estado de Firebase -->
-        <div class="text-center mb-6">
+        <div class="text-center mb-4">
             <div class="flex justify-center items-center gap-2 mb-2">
                 <h1 class="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400">
-                    Radar de Minas
+                    Radar de Minas Pro
                 </h1>
                 <div id="firebaseStatus" class="sync-indicator w-3 h-3 rounded-full bg-gray-500"></div>
             </div>
-            <p id="connectionText" class="text-slate-400 text-xs mb-2">Conectando...</p>
-            <p class="text-slate-400 text-sm">Predicción con historial en la nube</p>
+            <p id="connectionText" class="text-slate-400 text-xs">Conectando...</p>
         </div>
 
         <!-- Stats Badge -->
-        <div class="flex justify-center gap-2 mb-6">
+        <div class="flex justify-center gap-2 mb-4">
             <div id="historyStatus" class="bg-blue-900/50 text-blue-300 text-xs font-semibold px-4 py-1.5 rounded-full border border-blue-800/50 flex items-center gap-2">
-                <span class="relative flex h-2 w-2">
-                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                  <span class="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-                </span>
                 Rondas: 0
             </div>
         </div>
 
+        <!-- Estrategia y Configuración -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
+            <div>
+                <label class="block text-[10px] text-slate-400 mb-1 ml-1 font-semibold uppercase tracking-wider">Minas</label>
+                <select id="mineCount" class="w-full bg-slate-700 border border-slate-600 text-white text-xs rounded-lg px-2 py-1.5 outline-none focus:border-blue-500 transition-colors">
+                    <option value="1">1 Mina</option>
+                    <option value="2">2 Minas</option>
+                    <option value="3" selected>3 Minas</option>
+                    <option value="5">5 Minas</option>
+                    <option value="7">7 Minas</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] text-slate-400 mb-1 ml-1 font-semibold uppercase tracking-wider">Objetivo</label>
+                <select id="targetHits" class="w-full bg-slate-700 border border-slate-600 text-white text-xs rounded-lg px-2 py-1.5 outline-none focus:border-emerald-500 transition-colors">
+                    <option value="3">3 Aciertos</option>
+                    <option value="5" selected>5 Aciertos</option>
+                    <option value="10">10 Aciertos</option>
+                    <option value="15">15 Aciertos</option>
+                    <option value="20">20 Aciertos</option>
+                    <option value="24">24 Aciertos</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] text-slate-400 mb-1 ml-1 font-semibold uppercase tracking-wider">Apuesta</label>
+                <select id="betLevel" class="w-full bg-slate-700 border border-slate-600 text-white text-xs rounded-lg px-2 py-1.5 outline-none focus:border-purple-500 transition-colors">
+                    <option value="normal" selected>Normal ($)</option>
+                    <option value="high">Alta ($$$)</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Pincel de Selección -->
+        <div class="flex gap-2 mb-4 bg-slate-900/50 p-1.5 rounded-xl border border-slate-700/50">
+            <button id="brushMine" class="flex-1 bg-red-500/20 text-red-400 border border-red-500/50 text-xs font-bold py-2 rounded-lg transition-all shadow-inner" onclick="setBrush('mine')">
+                💣 Marcar Minas
+            </button>
+            <button id="brushAcierto" class="flex-1 bg-transparent text-slate-400 hover:bg-slate-700 text-xs font-bold py-2 rounded-lg transition-all" onclick="setBrush('acierto')">
+                ✅ Mis Aciertos
+            </button>
+        </div>
+
         <!-- Grid Container -->
-        <div class="grid-container mb-8">
-            <div id="mineGrid" class="grid grid-cols-5 gap-2 w-full max-w-[300px] mx-auto aspect-square">
+        <div class="grid-container mb-6">
+            <div id="mineGrid" class="grid grid-cols-5 gap-2 w-full max-w-[280px] mx-auto aspect-square">
                 <!-- Cells generated here -->
             </div>
         </div>
 
         <!-- Controls -->
         <div class="space-y-3">
-            <button id="btnRegister" class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold py-3 px-4 rounded-xl shadow-lg shadow-blue-900/20 transform active:scale-[0.98] transition-all flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-                </svg>
+            <button id="btnRegister" class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold py-3 px-4 rounded-xl shadow-lg shadow-blue-900/20 transform active:scale-[0.98] transition-all flex justify-center items-center gap-2">
                 <span id="btnText">Calcular Próxima Ronda</span>
+            </button>
+
+            <!-- Modo Cazaminas (Oculto por defecto) -->
+            <button id="btnCazaminas" class="hidden w-full bg-slate-700 hover:bg-slate-600 text-amber-400 border border-slate-600 font-semibold py-2 px-4 rounded-xl transition-colors text-sm flex justify-center items-center gap-2">
+                💀 Activar Modo Cazaminas
             </button>
             
             <div class="flex gap-3">
-                <button id="btnReset" class="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium py-2.5 px-4 rounded-xl transition-colors text-sm">
+                <button id="btnReset" class="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium py-2 px-4 rounded-xl transition-colors text-sm">
                     Limpiar
                 </button>
-                <button id="btnClearHistory" class="flex-1 bg-red-900/30 hover:bg-red-900/50 text-red-400 border border-red-900/50 font-medium py-2.5 px-4 rounded-xl transition-colors text-sm">
+                <button id="btnClearHistory" class="flex-1 bg-red-900/30 hover:bg-red-900/50 text-red-400 border border-red-900/50 font-medium py-2 px-4 rounded-xl transition-colors text-sm">
                     Borrar Todo
                 </button>
             </div>
-
-            <!-- Botón Cazaminas (Oculto hasta calcular) -->
-            <button id="btnToggleMode" class="hidden w-full mt-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-600 font-medium py-2.5 px-4 rounded-xl transition-colors text-sm flex justify-center items-center gap-2">
-                <span id="toggleIcon">💀</span>
-                <span id="toggleText">Ver Zonas de Peligro (Cazaminas)</span>
-            </button>
         </div>
 
         <!-- User Info -->
-        <div id="userInfo" class="mt-4 pt-4 border-t border-slate-700 text-center text-xs text-slate-500">
+        <div class="mt-4 pt-3 border-t border-slate-700 text-center text-xs text-slate-500">
             ID: <span id="userId">Cargando...</span>
         </div>
     </div>
@@ -113,7 +148,7 @@
     </div>
 
     <script>
-        // Debug function
+        // Funciones de utilidad
         function debug(msg) {
             const debugEl = document.getElementById('debugInfo');
             if (debugEl) {
@@ -124,7 +159,7 @@
         }
 
         // ==========================================
-        // 🔥 CONFIGURACIÓN DE FIREBASE
+        // 🔥 CONFIGURACIÓN DE FIREBASE (Tus credenciales)
         // ==========================================
         const firebaseConfig = {
             apiKey: "AIzaSyDnBl_DxrG9A3Hggvgrc6OO030okVo9E3E",
@@ -135,406 +170,338 @@
             appId: "1:574046109385:web:b85de400b9c6309c11d718"
         };
 
-        debug("📦 Firebase config cargado");
-
-        let db, auth, currentUserId = null, gameHistory = [], userStats = { totalRounds: 0, correctPredictions: 0 };
-        const gridSize = 5;
-        const gridElement = document.getElementById('mineGrid');
-        const statusElement = document.getElementById('historyStatus');
-        
+        let db, auth, currentUserId = null;
+        let gameHistory = []; 
         let cells = [];
-        let stateMode = 'input';
+        const gridSize = 5;
         
-        // --- Variables de Estado para Vistas ---
-        let lastCalculatedScores = []; 
-        let viewMode = 'safe'; // 'safe' o 'danger'
+        let stateMode = 'input'; // 'input', 'result', 'cazaminas'
+        let currentBrush = 'mine'; // 'mine', 'acierto'
+        let lastCalculatedScores = [];
 
-        // Modal Logic
-        const modal = document.getElementById('messageModal');
-        const modalContent = document.getElementById('modalContent');
-        const modalTitle = document.getElementById('modalTitle');
-        const modalMessage = document.getElementById('modalMessage');
-
+        // Modales
         function showMessage(title, message) {
-            modalTitle.textContent = title;
-            modalMessage.textContent = message;
-            modal.classList.remove('opacity-0', 'pointer-events-none');
-            modalContent.classList.remove('scale-95');
-            modalContent.classList.add('scale-100');
+            document.getElementById('modalTitle').textContent = title;
+            document.getElementById('modalMessage').textContent = message;
+            document.getElementById('messageModal').classList.remove('opacity-0', 'pointer-events-none');
+            document.getElementById('modalContent').classList.remove('scale-95');
+            document.getElementById('modalContent').classList.add('scale-100');
         }
 
         function closeModal() {
-            modal.classList.add('opacity-0', 'pointer-events-none');
-            modalContent.classList.remove('scale-100');
-            modalContent.classList.add('scale-95');
+            document.getElementById('messageModal').classList.add('opacity-0', 'pointer-events-none');
+            document.getElementById('modalContent').classList.remove('scale-100');
+            document.getElementById('modalContent').classList.add('scale-95');
+        }
+
+        function setBrush(type) {
+            currentBrush = type;
+            const btnMine = document.getElementById('brushMine');
+            const btnAcierto = document.getElementById('brushAcierto');
+            
+            if(type === 'mine') {
+                btnMine.className = 'flex-1 bg-red-500/20 text-red-400 border border-red-500/50 text-xs font-bold py-2 rounded-lg transition-all shadow-inner';
+                btnAcierto.className = 'flex-1 bg-transparent text-slate-400 hover:bg-slate-700 text-xs font-bold py-2 rounded-lg transition-all border border-transparent';
+            } else {
+                btnAcierto.className = 'flex-1 bg-blue-500/20 text-blue-400 border border-blue-500/50 text-xs font-bold py-2 rounded-lg transition-all shadow-inner';
+                btnMine.className = 'flex-1 bg-transparent text-slate-400 hover:bg-slate-700 text-xs font-bold py-2 rounded-lg transition-all border border-transparent';
+            }
         }
 
         function initGrid() {
-            debug("🎮 Inicializando grid...");
+            const gridElement = document.getElementById('mineGrid');
             gridElement.innerHTML = '';
             cells = [];
+            
             for (let i = 0; i < gridSize * gridSize; i++) {
                 const cell = document.createElement('div');
-                cell.className = 'cell-transition cursor-pointer rounded-xl bg-slate-700 border-2 border-slate-600 flex items-center justify-center text-xl font-bold shadow-inner select-none hover:bg-slate-600 active:scale-95';
+                cell.className = 'cell-transition cursor-pointer rounded-xl bg-slate-700 border-2 border-slate-600 flex items-center justify-center text-xl font-bold shadow-inner select-none hover:bg-slate-600 active:scale-95 text-white';
                 cell.dataset.index = i;
                 cell.dataset.isMine = 'false';
+                cell.dataset.isAcierto = 'false';
                 
-                cell.addEventListener('click', () => {
-                    if(stateMode === 'input') {
-                        toggleMine(cell);
-                    } else {
-                        resetGridForNewInput();
-                        toggleMine(cell);
-                    }
-                });
+                cell.addEventListener('click', () => handleCellClick(cell));
                 
                 gridElement.appendChild(cell);
                 cells.push(cell);
             }
-            debug("✅ Grid listo: " + cells.length + " celdas");
         }
 
-        function toggleMine(cell) {
-            const isMine = cell.dataset.isMine === 'true';
-            cell.dataset.isMine = !isMine;
+        function handleCellClick(cell) {
+            if(stateMode !== 'input') {
+                resetGridForNewInput();
+            }
             
-            if (!isMine) {
-                cell.classList.remove('bg-slate-700', 'border-slate-600', 'hover:bg-slate-600');
-                cell.classList.add('bg-red-500/20', 'border-red-500', 'mine-glow', 'text-2xl');
-                cell.textContent = '💣';
+            if (currentBrush === 'mine') {
+                const isMine = cell.dataset.isMine === 'true';
+                cell.dataset.isMine = !isMine;
+                cell.dataset.isAcierto = 'false'; // Limpia el otro estado
+                
+                if (!isMine) {
+                    cell.className = 'cell-transition cursor-pointer rounded-xl bg-red-500/20 border-2 border-red-500 mine-glow flex items-center justify-center text-2xl select-none active:scale-95';
+                    cell.textContent = '💣';
+                } else {
+                    cell.className = 'cell-transition cursor-pointer rounded-xl bg-slate-700 border-2 border-slate-600 flex items-center justify-center text-xl font-bold shadow-inner select-none hover:bg-slate-600 active:scale-95 text-white';
+                    cell.textContent = '';
+                }
             } else {
-                cell.classList.add('bg-slate-700', 'border-slate-600', 'hover:bg-slate-600');
-                cell.classList.remove('bg-red-500/20', 'border-red-500', 'mine-glow', 'text-2xl');
-                cell.textContent = '';
+                const isAcierto = cell.dataset.isAcierto === 'true';
+                cell.dataset.isAcierto = !isAcierto;
+                cell.dataset.isMine = 'false';
+                
+                if (!isAcierto) {
+                    cell.className = 'cell-transition cursor-pointer rounded-xl bg-blue-500/20 border-2 border-blue-500 acierto-glow flex items-center justify-center text-xl select-none active:scale-95 text-blue-400';
+                    cell.textContent = '✅';
+                } else {
+                    cell.className = 'cell-transition cursor-pointer rounded-xl bg-slate-700 border-2 border-slate-600 flex items-center justify-center text-xl font-bold shadow-inner select-none hover:bg-slate-600 active:scale-95 text-white';
+                    cell.textContent = '';
+                }
             }
         }
 
         function resetGridForNewInput() {
             stateMode = 'input';
-            viewMode = 'safe'; // Reseteamos la vista por defecto
-            
-            // Ocultar botón de cazaminas al limpiar
-            const toggleBtn = document.getElementById('btnToggleMode');
-            if(toggleBtn) toggleBtn.classList.add('hidden');
-
             cells.forEach(cell => {
                 cell.dataset.isMine = 'false';
-                cell.className = 'cell-transition cursor-pointer rounded-xl bg-slate-700 border-2 border-slate-600 flex items-center justify-center text-xl font-bold shadow-inner select-none hover:bg-slate-600 active:scale-95 text-slate-100';
-                cell.innerHTML = ''; // Limpiar HTML completo (estrellas y texto)
+                cell.dataset.isAcierto = 'false';
+                cell.className = 'cell-transition cursor-pointer rounded-xl bg-slate-700 border-2 border-slate-600 flex items-center justify-center text-xl font-bold shadow-inner select-none hover:bg-slate-600 active:scale-95 text-white';
+                cell.textContent = '';
             });
             document.getElementById('btnText').textContent = 'Calcular Próxima Ronda';
-        }
-
-        function updateConnectionStatus(connected) {
-            const statusEl = document.getElementById('firebaseStatus');
-            const textEl = document.getElementById('connectionText');
-            const btn = document.getElementById('btnRegister');
-            
-            if (connected) {
-                statusEl.className = 'sync-indicator w-3 h-3 rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/50';
-                textEl.textContent = 'Sincronizado en la nube ✓';
-                textEl.className = 'text-emerald-400 text-xs mb-2';
-                btn.disabled = false;
-                debug("✅ Conectado a Firebase");
-            } else {
-                statusEl.className = 'sync-indicator w-3 h-3 rounded-full bg-red-500';
-                textEl.textContent = 'Sin conexión';
-                textEl.className = 'text-red-400 text-xs mb-2';
-                btn.disabled = true;
-                debug("❌ Desconectado");
-            }
-        }
-
-        async function initializeFirebase() {
-            try {
-                debug("🔥 Inicializando Firebase...");
-                firebase.initializeApp(firebaseConfig);
-                db = firebase.firestore();
-                auth = firebase.auth();
-                debug("✅ Firebase inicializado");
-                
-                // Auth anónima
-                debug("🔐 Intentando autenticación anónima...");
-                const userCredential = await auth.signInAnonymously();
-                currentUserId = userCredential.user.uid;
-                debug("✅ Autenticado: " + currentUserId.substring(0, 8));
-                
-                document.getElementById('userId').textContent = currentUserId.substring(0, 8) + '...';
-                updateConnectionStatus(true);
-                
-                // Cargar historial
-                await loadHistoryFromFirebase();
-                
-            } catch (error) {
-                debug("❌ ERROR: " + error.message);
-                debug("Código: " + error.code);
-                console.error(error);
-                updateConnectionStatus(false);
-                
-                let errorMsg = error.message;
-                if (error.code === 'auth/unauthorized-domain') {
-                    errorMsg = "Dominio no autorizado. Agrega tu dominio en Firebase Console → Authentication → Configuración → Dominios autorizados";
-                } else if (error.code === 'permission-denied') {
-                    errorMsg = "Permisos denegados en Firestore. Verifica las reglas.";
-                }
-                
-                setTimeout(() => showMessage("Error de Conexión", errorMsg), 1000);
-            }
-        }
-
-        async function loadHistoryFromFirebase() {
-            if (!currentUserId) return;
-            
-            try {
-                debug("📥 Cargando historial de Firebase...");
-                const snapshot = await db.collection('users').doc(currentUserId)
-                    .collection('gameHistory')
-                    .orderBy('createdAt', 'asc')
-                    .limit(100)
-                    .get();
-                
-                gameHistory = [];
-                snapshot.forEach((doc) => {
-                    const data = doc.data();
-                    if (data.mines) {
-                        gameHistory.push(data.mines);
-                    }
-                });
-                
-                debug("✅ Cargadas " + gameHistory.length + " rondas");
-                updateStatusUI();
-                
-                if (gameHistory.length > 0) {
-                    setTimeout(() => showMessage("Datos Cargados", `Se cargaron ${gameHistory.length} rondas desde la nube`), 1000);
-                }
-                
-            } catch (error) {
-                debug("❌ Error cargando: " + error.message);
-                console.error(error);
-            }
-        }
-
-        async function saveToFirebase(roundData) {
-            if (!currentUserId) return;
-            
-            try {
-                debug("💾 Guardando ronda " + gameHistory.length);
-                const docRef = db.collection('users').doc(currentUserId)
-                    .collection('gameHistory').doc();
-                
-                await docRef.set({
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-                    roundNumber: gameHistory.length,
-                    mines: roundData.mines,
-                    prediction: roundData.prediction,
-                    createdAt: new Date().toISOString()
-                });
-                
-                debug("✅ Guardado en Firebase");
-            } catch (error) {
-                debug("❌ Error guardando: " + error.message);
-                console.error(error);
-            }
-        }
-
-        async function clearHistoryInFirebase() {
-            if (!currentUserId) return;
-            
-            try {
-                const snapshot = await db.collection('users').doc(currentUserId)
-                    .collection('gameHistory').get();
-                
-                const batch = db.batch();
-                snapshot.forEach((doc) => {
-                    batch.delete(doc.ref);
-                });
-                
-                await batch.commit();
-                debug("🗑️ Historial borrado de Firebase");
-            } catch (error) {
-                debug("❌ Error borrando: " + error.message);
-            }
+            document.getElementById('btnCazaminas').classList.add('hidden');
         }
 
         function calculateProbability() {
-            if (stateMode === 'result') {
+            if (stateMode === 'result' || stateMode === 'cazaminas') {
                 resetGridForNewInput();
                 return;
             }
 
             const currentRoundMines = cells.map(c => c.dataset.isMine === 'true');
-            const totalMinesMarked = currentRoundMines.filter(m => m).length;
-
-            if (totalMinesMarked === 0) {
-                showMessage("Tablero Vacío", "Marca las minas de la ronda actual antes de calcular.");
+            const currentRoundAciertos = cells.map(c => c.dataset.isAcierto === 'true');
+            
+            if (currentRoundMines.filter(m => m).length === 0 && currentRoundAciertos.filter(a => a).length === 0) {
+                showMessage("Tablero Vacío", "Marca al menos una mina o un acierto de la ronda actual.");
                 return;
             }
 
-            gameHistory.push(currentRoundMines);
+            // Guardar en historial local
+            const roundData = { mines: currentRoundMines, aciertos: currentRoundAciertos };
+            gameHistory.push(roundData);
             if (gameHistory.length > 100) gameHistory.shift();
             
             updateStatusUI();
-            stateMode = 'result';
+            saveToFirebase(roundData);
 
-            saveToFirebase({
-                mines: currentRoundMines,
-                prediction: 'calculated'
-            });
+            // Leer configuración estratégica
+            const activeMines = parseInt(document.getElementById('mineCount').value);
+            const targetHits = parseInt(document.getElementById('targetHits').value);
+            const betLevel = document.getElementById('betLevel').value;
+            
+            // Base matemática: probabilidad de sobrevivir a 1 click aleatorio
+            const baseSafety = 100 - ((activeMines / 25) * 100); 
+            let scores = [];
 
-            lastCalculatedScores = []; // Limpiamos puntajes para nueva vista
-
+            // Análisis por casilla
             cells.forEach((cell, index) => {
-                let weightedMineCount = 0;
+                let mineFreq = 0;
+                let aciertoFreq = 0;
                 let roundsAgoLastMine = 99;
-                let totalWeight = 0;
 
-                // Algoritmo Ponderado: Las rondas recientes impactan más que las viejas
-                for (let i = 0; i < gameHistory.length; i++) {
-                    let weight = 1 + (i / gameHistory.length) * 1.5; // Peso de 1.0 a 2.5
-                    totalWeight += weight;
-
-                    if (gameHistory[i][index]) {
-                        weightedMineCount += weight;
-                        roundsAgoLastMine = (gameHistory.length - 1) - i;
+                // Revisar historial
+                for (let i = gameHistory.length - 1; i >= 0; i--) {
+                    const pastRound = gameHistory[i];
+                    if (pastRound.mines && pastRound.mines[index]) {
+                        mineFreq++;
+                        if (roundsAgoLastMine === 99) roundsAgoLastMine = (gameHistory.length - 1) - i;
+                    }
+                    if (pastRound.aciertos && pastRound.aciertos[index]) {
+                        aciertoFreq++;
                     }
                 }
 
-                // Cálculo de Riesgo normalizado
-                let riskRatio = totalWeight > 0 ? (weightedMineCount / totalWeight) : 0;
-                let safetyPercentage = 95 - (riskRatio * 100); 
+                let safetyPercentage = baseSafety;
                 
-                // Ajustes situacionales
-                if (roundsAgoLastMine === 0) safetyPercentage -= 15; // Cayó justo antes
-                if (roundsAgoLastMine >= 4) safetyPercentage += 12; // Lleva rato sin caer
+                // Penalizaciones
+                safetyPercentage -= (mineFreq * (10 + activeMines));
+                if (roundsAgoLastMine === 0) safetyPercentage -= (8 + activeMines);
+                
+                // Bonus
+                if (roundsAgoLastMine >= 3) safetyPercentage += 5;
+                safetyPercentage += (aciertoFreq * 6); // Zonas de confort del usuario
 
-                const row = Math.floor(index / gridSize);
-                const col = index % gridSize;
-                const neighbors = [index - gridSize, index + gridSize, index - 1, index + 1];
-                let adjacentMinesInLastRound = 0;
-
-                if (gameHistory.length > 0) {
-                    const lastRound = gameHistory[gameHistory.length - 1];
-                    neighbors.forEach(n => {
-                        if (n >= 0 && n < 25) {
-                            if ((col === 0 && n === index - 1) || (col === gridSize - 1 && n === index + 1)) return;
-                            if (lastRound[n]) adjacentMinesInLastRound++;
-                        }
-                    });
+                // Modo apuesta alta (Riesgo castigado)
+                if (betLevel === 'high') {
+                    safetyPercentage -= 8;
+                    if (safetyPercentage > 88) safetyPercentage = 88; // Quitar falsa confianza
                 }
 
-                safetyPercentage -= (adjacentMinesInLastRound * 6);
-                
-                // Límites realistas (Ninguna es 100% segura, limitamos a 94 máximo)
-                safetyPercentage = Math.max(5, Math.min(94, safetyPercentage));
-                
-                lastCalculatedScores.push(Math.floor(safetyPercentage));
+                safetyPercentage = Math.max(10, Math.min(96, safetyPercentage));
+                scores.push({ index: index, score: safetyPercentage });
+            });
+
+            // Encontrar el top para las "Estrellas" basado en el objetivo
+            const sortedScores = [...scores].sort((a, b) => b.score - a.score);
+            const topIndices = sortedScores.slice(0, targetHits).map(s => s.index);
+
+            // Aplicar UI
+            lastCalculatedScores = scores;
+            stateMode = 'result';
+            
+            scores.forEach(s => {
+                const cell = cells[s.index];
+                const isStar = topIndices.includes(s.index);
+                applyHeatmap(cell, s.score, isStar, false);
             });
 
             document.getElementById('btnText').textContent = 'Ingresar Nueva Ronda';
-            
-            // Mostrar botón Cazaminas
-            const toggleBtn = document.getElementById('btnToggleMode');
-            if(toggleBtn) toggleBtn.classList.remove('hidden');
-
-            renderGridScores();
+            document.getElementById('btnCazaminas').classList.remove('hidden');
+            document.getElementById('btnCazaminas').innerHTML = '💀 Activar Modo Cazaminas';
         }
 
-        function renderGridScores() {
-            // Buscamos el top 3 de seguras y peligrosas para destacarlas
-            let sortedScores = [...lastCalculatedScores].sort((a, b) => b - a);
-            let topSafest = sortedScores.slice(0, 3);
-            let topDanger = sortedScores.slice(-3);
-
-            cells.forEach((cell, index) => {
-                let safeScore = lastCalculatedScores[index];
-                
-                let isTopSafe = topSafest.includes(safeScore) && topSafest.length > 0;
-                let isTopDanger = topDanger.includes(safeScore) && topDanger.length > 0;
-
-                // Reiniciamos clases
-                cell.className = 'cell-transition flex flex-col items-center justify-center text-sm sm:text-base font-bold rounded-xl shadow-inner select-none transition-all duration-500 relative overflow-hidden';
-                
-                if (viewMode === 'safe') {
-                    // --- VISTA: SEGURO (Predeterminado) ---
-                    if (safeScore >= 75) {
-                        cell.classList.add('bg-emerald-500/20', 'border-2', 'border-emerald-500/50', 'text-emerald-400');
-                    } else if (safeScore >= 45) {
-                        cell.classList.add('bg-amber-500/20', 'border-2', 'border-amber-500/50', 'text-amber-400');
-                    } else {
-                        cell.classList.add('bg-red-500/20', 'border-2', 'border-red-500/50', 'text-red-400', 'opacity-50');
-                    }
-                    
-                    let innerHTML = `<span>${safeScore}%</span>`;
-                    
-                    // Hit & Run (Estrellas)
-                    if (isTopSafe) {
-                        cell.classList.add('ring-2', 'ring-emerald-400', 'ring-offset-2', 'ring-offset-slate-800', 'shadow-[0_0_15px_rgba(52,211,153,0.5)]');
-                        innerHTML += `<span class="absolute top-0 right-1 text-[10px] sm:text-xs animate-pulse">⭐</span>`;
-                    }
-                    cell.innerHTML = innerHTML;
-
+        function applyHeatmap(cell, safeScore, isStar, isCazaminas) {
+            cell.className = 'cell-transition flex items-center justify-center text-sm sm:text-base font-bold rounded-xl shadow-inner select-none transition-all duration-500 relative';
+            
+            if (isCazaminas) {
+                // Modo Peligro Invertido
+                const dangerScore = 100 - safeScore;
+                if (dangerScore >= 70) {
+                    cell.classList.add('bg-red-900/80', 'border-2', 'border-red-500', 'text-red-400');
+                    cell.innerHTML = `💀 <span class="absolute bottom-1 right-1 text-[9px] opacity-70">${Math.floor(dangerScore)}%</span>`;
+                } else if (dangerScore >= 40) {
+                    cell.classList.add('bg-orange-900/60', 'border-2', 'border-orange-500/50', 'text-orange-400');
+                    cell.textContent = `${Math.floor(dangerScore)}%`;
                 } else {
-                    // --- VISTA: CAZAMINAS 💀 ---
-                    let dangerScore = 100 - safeScore; // Invertimos
-                    
-                    if (dangerScore >= 75) {
-                        cell.classList.add('bg-purple-900/40', 'border-2', 'border-purple-500', 'text-purple-400', 'shadow-[0_0_15px_rgba(168,85,247,0.4)]');
-                    } else if (dangerScore >= 45) {
-                        cell.classList.add('bg-orange-900/40', 'border-2', 'border-orange-500/50', 'text-orange-400');
-                    } else {
-                        cell.classList.add('bg-slate-800', 'border-2', 'border-slate-700', 'text-slate-500', 'opacity-30');
-                    }
-                    
-                    let innerHTML = `<span>${dangerScore}%</span>`;
-                    
-                    if (isTopDanger) {
-                        cell.classList.add('ring-2', 'ring-purple-500', 'ring-offset-2', 'ring-offset-slate-800', 'bg-purple-900/60');
-                        innerHTML += `<span class="absolute top-0 right-1 text-[10px] sm:text-xs animate-bounce">💀</span>`;
-                    }
-                    cell.innerHTML = innerHTML;
+                    cell.classList.add('bg-slate-800', 'border-2', 'border-slate-700', 'text-slate-500');
+                    cell.textContent = `${Math.floor(dangerScore)}%`;
                 }
-            });
+            } else {
+                // Modo Seguro Normal
+                if (safeScore >= 80) {
+                    cell.classList.add('bg-emerald-500/20', 'border-2', 'border-emerald-500/50', 'text-emerald-400');
+                    if(isStar) cell.classList.add('star-target', 'border-emerald-400');
+                } else if (safeScore >= 50) {
+                    cell.classList.add('bg-amber-500/20', 'border-2', 'border-amber-500/50', 'text-amber-400');
+                } else {
+                    cell.classList.add('bg-red-500/20', 'border-2', 'border-red-500/50', 'text-red-400');
+                }
+                
+                if (isStar) {
+                    cell.innerHTML = `⭐ <br><span class="text-[10px] absolute bottom-0.5">${Math.floor(safeScore)}%</span>`;
+                } else {
+                    cell.textContent = `${Math.floor(safeScore)}%`;
+                }
+            }
         }
 
-        function toggleViewMode() {
-            viewMode = viewMode === 'safe' ? 'danger' : 'safe';
-            const btnText = document.getElementById('toggleText');
-            const btnIcon = document.getElementById('toggleIcon');
-            
-            if (viewMode === 'safe') {
-                btnIcon.textContent = '💀';
-                btnText.textContent = 'Ver Zonas de Peligro (Cazaminas)';
-            } else {
-                btnIcon.textContent = '⭐';
-                btnText.textContent = 'Ver Zonas Seguras';
+        function toggleCazaminas() {
+            if (stateMode === 'result') {
+                stateMode = 'cazaminas';
+                document.getElementById('btnCazaminas').innerHTML = '🛡️ Volver a Modo Seguro';
+                document.getElementById('btnCazaminas').classList.replace('text-amber-400', 'text-emerald-400');
+                
+                lastCalculatedScores.forEach(s => {
+                    applyHeatmap(cells[s.index], s.score, false, true);
+                });
+            } else if (stateMode === 'cazaminas') {
+                stateMode = 'result';
+                document.getElementById('btnCazaminas').innerHTML = '💀 Activar Modo Cazaminas';
+                document.getElementById('btnCazaminas').classList.replace('text-emerald-400', 'text-amber-400');
+                
+                // Recalcular estrellas
+                const targetHits = parseInt(document.getElementById('targetHits').value);
+                const sortedScores = [...lastCalculatedScores].sort((a, b) => b.score - a.score);
+                const topIndices = sortedScores.slice(0, targetHits).map(s => s.index);
+
+                lastCalculatedScores.forEach(s => {
+                    const isStar = topIndices.includes(s.index);
+                    applyHeatmap(cells[s.index], s.score, isStar, false);
+                });
             }
-            renderGridScores();
         }
 
         function updateStatusUI() {
-            const statusText = `Rondas: ${gameHistory.length}`;
-            statusElement.innerHTML = `
+            const statusEl = document.getElementById('historyStatus');
+            statusEl.innerHTML = `
                 <span class="relative flex h-2 w-2">
                   <span class="animate-ping absolute inline-flex h-full w-full rounded-full ${gameHistory.length > 0 ? 'bg-emerald-400' : 'bg-blue-400'} opacity-75"></span>
                   <span class="relative inline-flex rounded-full h-2 w-2 ${gameHistory.length > 0 ? 'bg-emerald-500' : 'bg-blue-500'}"></span>
                 </span>
-                ${statusText}
+                Rondas en Nube: ${gameHistory.length}
             `;
-            
-            if(gameHistory.length > 0) {
-                statusElement.classList.replace('bg-blue-900/50', 'bg-emerald-900/50');
-                statusElement.classList.replace('text-blue-300', 'text-emerald-300');
-                statusElement.classList.replace('border-blue-800/50', 'border-emerald-800/50');
+        }
+
+        async function initializeFirebase() {
+            try {
+                firebase.initializeApp(firebaseConfig);
+                db = firebase.firestore();
+                auth = firebase.auth();
+                
+                const userCredential = await auth.signInAnonymously();
+                currentUserId = userCredential.user.uid;
+                
+                document.getElementById('userId').textContent = currentUserId.substring(0, 8) + '...';
+                
+                const statusEl = document.getElementById('firebaseStatus');
+                const textEl = document.getElementById('connectionText');
+                statusEl.className = 'sync-indicator w-3 h-3 rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/50';
+                textEl.textContent = 'Sincronizado ✓';
+                textEl.className = 'text-emerald-400 text-xs';
+                
+                await loadHistoryFromFirebase();
+                debug("✅ Firebase listo.");
+            } catch (error) {
+                debug("❌ Error Firebase: " + error.message);
+                document.getElementById('connectionText').textContent = 'Error de conexión';
+                document.getElementById('firebaseStatus').className = 'sync-indicator w-3 h-3 rounded-full bg-red-500';
             }
         }
 
+        async function loadHistoryFromFirebase() {
+            if (!currentUserId) return;
+            try {
+                const snapshot = await db.collection('users').doc(currentUserId)
+                    .collection('gameHistory').orderBy('createdAt', 'asc').limit(100).get();
+                
+                gameHistory = [];
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    // Compatibilidad con historial viejo que solo tenía minas
+                    gameHistory.push({
+                        mines: data.mines || [],
+                        aciertos: data.aciertos || []
+                    });
+                });
+                updateStatusUI();
+                debug(`📥 Cargadas ${gameHistory.length} rondas.`);
+            } catch (error) { debug("❌ Error cargando: " + error.message); }
+        }
+
+        async function saveToFirebase(roundData) {
+            if (!currentUserId) return;
+            try {
+                await db.collection('users').doc(currentUserId).collection('gameHistory').add({
+                    mines: roundData.mines,
+                    aciertos: roundData.aciertos,
+                    createdAt: new Date().toISOString()
+                });
+                debug("💾 Ronda guardada.");
+            } catch (error) { debug("❌ Error guardando: " + error.message); }
+        }
+
         async function clearHistory() {
-            if (confirm('¿Borrar todo el historial?')) {
+            if (confirm('¿Borrar todo el historial local y de la nube?')) {
                 gameHistory = [];
                 updateStatusUI();
                 resetGridForNewInput();
-                await clearHistoryInFirebase();
-                showMessage("Memoria Borrada", "Historial eliminado de la nube");
+                
+                if (currentUserId) {
+                    const snapshot = await db.collection('users').doc(currentUserId).collection('gameHistory').get();
+                    const batch = db.batch();
+                    snapshot.forEach(doc => batch.delete(doc.ref));
+                    await batch.commit();
+                }
+                showMessage("Memoria Borrada", "Historial eliminado exitosamente.");
             }
         }
 
@@ -542,11 +509,9 @@
         document.getElementById('btnRegister').addEventListener('click', calculateProbability);
         document.getElementById('btnReset').addEventListener('click', resetGridForNewInput);
         document.getElementById('btnClearHistory').addEventListener('click', clearHistory);
-        document.getElementById('btnToggleMode').addEventListener('click', toggleViewMode);
+        document.getElementById('btnCazaminas').addEventListener('click', toggleCazaminas);
 
-        // Inicializar
         window.onload = () => {
-            debug("🚀 App iniciando...");
             initGrid();
             initializeFirebase();
         };
